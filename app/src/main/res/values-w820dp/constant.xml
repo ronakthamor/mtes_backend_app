@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="string" name="backend_controller" format="string">https://mtesapp.azurewebsites.net/backend</item>
+</resources>

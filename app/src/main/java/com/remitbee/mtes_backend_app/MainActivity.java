@@ -107,7 +107,8 @@ public class MainActivity extends ActionBarActivity {
 
     public void onActivityResult(int requestCode, int resultCode, Intent intent) {
         IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, intent);
-        if (scanResult != null) {
+        System.out.println(scanResult);
+        if (scanResult.getContents() != null) {
             // Check validity of the QR code:
             String qr_code = scanResult.getContents();
             // Process transaction:

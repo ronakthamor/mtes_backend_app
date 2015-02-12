@@ -554,14 +554,16 @@ public class MainActivity extends ActionBarActivity {
             }
         }
         protected void onPostExecute(Bitmap result) {
+            Bitmap newResult = Bitmap.createScaledBitmap(result, 250, 250, false);
           if(trigger.equals("id_1")){
-                cus_id_1.setImageBitmap(result);
+
+                cus_id_1.setImageBitmap(newResult);
             }
             else if(trigger.equals("id_2")){
-                cus_id_2.setImageBitmap(result);
+                cus_id_2.setImageBitmap(newResult);
             }
             else if(trigger.equals("id_3")){
-                cus_id_3.setImageBitmap(result);
+                cus_id_3.setImageBitmap(newResult);
             }
         }
 

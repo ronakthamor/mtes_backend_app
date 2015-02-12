@@ -1,4 +1,4 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical"
     android:id="@+id/container"
     xmlns:tools="http://schemas.android.com/tools" android:layout_width="match_parent"
@@ -31,8 +31,8 @@
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:text=""
         android:id="@+id/content_id"
-        android:layout_below="@+id/btn_scan_qr_code"
-        android:layout_centerHorizontal="true" />
+        android:layout_below="@+id/label_id"
+       />
 
     <TextView
         android:layout_width="match_parent"
@@ -41,7 +41,7 @@
         android:text=""
         android:id="@+id/label_name"
         android:textStyle="bold"
-        android:layout_below="@+id/label_id"
+        android:layout_below="@+id/content_id"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true" />
     <TextView
@@ -50,7 +50,7 @@
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:text=""
         android:id="@+id/content_name"
-        android:layout_below="@+id/label_id"
+        android:layout_below="@+id/label_name"
         android:layout_centerHorizontal="true" />
 
     <TextView
@@ -60,7 +60,7 @@
         android:text=""
         android:textStyle="bold"
         android:id="@+id/label_email"
-        android:layout_below="@+id/label_name"
+        android:layout_below="@+id/content_name"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true" />
     <TextView
@@ -69,7 +69,7 @@
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:text=""
         android:id="@+id/content_email"
-        android:layout_below="@+id/label_name"
+        android:layout_below="@+id/label_email"
         android:layout_centerHorizontal="true" />
 
     <TextView
@@ -79,7 +79,7 @@
         android:text=""
         android:textStyle="bold"
         android:id="@+id/label_phone"
-        android:layout_below="@+id/label_email"
+        android:layout_below="@+id/content_email"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true" />
     <TextView
@@ -88,7 +88,7 @@
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:text=""
         android:id="@+id/content_phone"
-        android:layout_below="@+id/label_email"
+        android:layout_below="@+id/label_phone"
         android:layout_centerHorizontal="true" />
 
     <LinearLayout
@@ -130,4 +130,4 @@
         android:layout_height="match_parent"
         android:visibility="invisible"
         android:contentDescription="Touch to close" />
-</LinearLayout>
+</RelativeLayout>

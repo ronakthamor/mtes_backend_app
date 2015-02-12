@@ -4,8 +4,11 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -14,12 +17,13 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.support.v7.app.ActionBarActivity;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
@@ -30,13 +34,30 @@ import android.widget.Toast;
 import com.remitbee.mtes_backend_app.model.User;
 import com.remitbee.mtes_backend_app.parsers.UserJSONParser;
 
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 
 
 public class MainActivity extends ActionBarActivity {
+    // Camera:
+    final int TAKE_PHOTO_CODE = 0;
+    //File upload
+    final int UPLOAD_PHOTO_CODE = 1;
+
+    final int VIEW_PHOTO_CODE =2;
+    String which_photo = "";
+    int serverResponseCode = 0;
+
+    String dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + "/remitbee/";
     private ProgressDialog pd = null;
     User user_detail = new User("","","","","","","","","","","","","","","");
 
@@ -53,6 +74,10 @@ public class MainActivity extends ActionBarActivity {
     ImageView cus_id_1;
     ImageView cus_id_2;
     ImageView cus_id_3;
+
+    String user_id_1 = "";
+    String user_id_2 = "";
+    String user_id_3 = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,78 +111,363 @@ public class MainActivity extends ActionBarActivity {
         );
 
 
-        cus_id_1.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                zoomImageFromThumb(cus_id_1, cus_id_1.getDrawable());
-            }
-        });
-        cus_id_2.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                zoomImageFromThumb(cus_id_2, cus_id_2.getDrawable());
-            }
-        });
-        cus_id_3.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                zoomImageFromThumb(cus_id_3, cus_id_3.getDrawable());
-            }
-        });
 
     }
 
-
+    @Override
     public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-        IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, intent);
-        System.out.println(scanResult);
-        if (scanResult.getContents() != null) {
-            // Check validity of the QR code:
-            String qr_code = scanResult.getContents();
-            // Process transaction:
-            if (isOnline()) {
-                String uri = "https://mtesapp.azurewebsites.net/backend"; // Get App specific constants
-                RequestPackage p = new RequestPackage();
-                p.setMethod("GET");
-                p.setUri(uri);
-                p.setParams("method", "check_qr_code");
-                p.setParams("format", "json");
-                p.setParams("qr_code", qr_code);
+        //UPLOAD IMAGE
+        String upLoadServerUri = null;
 
-                new AsyncTaskCheckQRCode(MainActivity.this).execute(p);
-            } else {
-                Toast.makeText(getApplicationContext(), "Network isn't available", Toast.LENGTH_LONG).show();
+        if (resultCode == MainActivity.RESULT_OK) {
+            IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, intent);
+            if (requestCode != IntentIntegrator.REQUEST_CODE) {
+                File imgFile = null;
+
+
+                Bitmap myBitmap = null;
+
+                if (requestCode == TAKE_PHOTO_CODE) {
+                    Log.d("CameraDemo", "Pic saved");
+                    imgFile = new File(dir + "remitbee_profile_pic.jpg");
+                    myBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+                    Bitmap newResult = Bitmap.createScaledBitmap(myBitmap, 250, 250, false);
+                    make_uri_and_update(which_photo,newResult, imgFile);
+                }
+                //If photo was uploaded from gallery
+                else if (requestCode == UPLOAD_PHOTO_CODE) {
+                    final Uri selectedImageuri = intent.getData();
+                    new AsyncTaskMakePic(MainActivity.this, which_photo, selectedImageuri, this.getContentResolver()).execute();
+                }
+
+                } else {
+
+
+                    //SCANNER
+                Log.v("HERE", "SCANNER");
+
+                    if (scanResult != null) {
+                        // Check validity of the QR code:
+                        String qr_code = scanResult.getContents();
+                        // Process transaction:
+                        if (isOnline()) {
+                            String uri = "https://mtesapp.azurewebsites.net/backend"; // Get App specific constants
+                            RequestPackage p = new RequestPackage();
+                            p.setMethod("GET");
+                            p.setUri(uri);
+                            p.setParams("method", "check_qr_code");
+                            p.setParams("format", "json");
+                            p.setParams("qr_code", qr_code);
+
+                            new AsyncTaskCheckQRCode(MainActivity.this).execute(p);
+                        } else {
+                            Toast.makeText(getApplicationContext(), "Network isn't available", Toast.LENGTH_LONG).show();
+                        }
+                    } else {
+                        Toast.makeText(getApplicationContext(), "No QR Code found", Toast.LENGTH_LONG).show();
+                    }
+                }
             }
         }
-        else{
-            Toast.makeText(getApplicationContext(), "No QR Code found", Toast.LENGTH_LONG).show();
+
+
+        //Listener for uploading a new picture
+
+    public void upload_picture(View v) {
+
+        int which_pic = Integer.parseInt(v.getTag().toString());
+        switch (which_pic) {
+            case 0:
+                which_photo = "profile_pic";
+                break;
+            case 1:
+                which_photo = "id_1";
+                break;
+            case 2:
+                which_photo = "id_2";
+                break;
+            case 3:
+                which_photo = "id_3";
+                break;
+
+
         }
+        CharSequence choice[] = new CharSequence[]{"Picture From Camera", "Upload From Gallery", "View Photo"};
+        final ImageView img = (ImageView) v;
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Upload a new picture");
+        builder.setItems(choice, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                // the user clicked on [which]
+                switch (which) {
+                    case TAKE_PHOTO_CODE:
+                        camera_picture();
+                        break;
+                    case UPLOAD_PHOTO_CODE:
+                        openGallery();
+                        break;
+                    case VIEW_PHOTO_CODE:
+                        zoomImageFromThumb(img, img.getDrawable());
+                        break;
+
+                }
+            }
+        });
+        builder.show();
+
+
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
+    public void camera_picture() {
+        String file = dir + "remitbee_profile_pic.jpg";
+        File newfile = new File(file);
+        try {
+            newfile.createNewFile();
+        } catch (IOException e) {
+        }
+
+        Uri outputFileUri = Uri.fromFile(newfile);
+
+        Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, outputFileUri);
+        startActivityForResult(cameraIntent, TAKE_PHOTO_CODE);
+
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+    public void openGallery() {
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT, null);
+        intent.setType("image/*");
+
+        startActivityForResult(Intent.createChooser(intent, "Select Picture"), UPLOAD_PHOTO_CODE);
+
+
+    }
+
+    public void make_uri_and_update(String trigger, Bitmap result, File imgFile){
+        String uri = null;
+        if (trigger.equals("id_1")) {
+            uri = "https://mtesapp.azurewebsites.net/user?method=upload_id_pic&cus_unique_id=" + user_detail.getCus_unique_id() + "&format=json&which_id=" + user_id_1;
+            cus_id_1.setImageBitmap(result);
+        } else if (trigger.equals("id_2")) {
+            uri = "https://mtesapp.azurewebsites.net/user?method=upload_id_pic&cus_unique_id=" + user_detail.getCus_unique_id() + "&format=json&which_id=" + user_id_2;
+            cus_id_2.setImageBitmap(result);
+        } else if (trigger.equals("id_3")) {
+            uri = "https://mtesapp.azurewebsites.net/user?method=upload_id_pic&cus_unique_id=" + user_detail.getCus_unique_id() + "&format=json&which_id=" + user_id_3;
+            cus_id_3.setImageBitmap(result);
         }
-        return super.onOptionsItemSelected(item);
+        // Retrieve file:
+        if (imgFile.isFile()) {
+            final String finalUpLoadServerUri = uri;
+            new Thread(new Runnable() {
+                public void run() {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            // Show the ProgressDialog on this thread
+                            //pd = ProgressDialog.show(EditProfileActivity.this, "Processing", "Uploading Image...", true, false);
+                        }
+                    });
+                    uploadFile(dir + "remitbee_profile_pic.jpg", finalUpLoadServerUri);
+                }
+            }).start();
+        } else {
+            Log.v("Not a file", "PROBLEM!!!");
+        }
+
+    }
+
+
+    class AsyncTaskMakePic extends AsyncTask<String, Void, Bitmap> {
+        String trigger;
+        Uri selectedImageuri;
+        Bitmap newResult = null;
+        ContentResolver cr;
+        Context context;
+        File imgFile;
+
+        public AsyncTaskMakePic(Context context, String which_pic, Uri uri, ContentResolver cr) {
+            this.context = context;
+            trigger = which_pic;
+            selectedImageuri = uri;
+            this.cr = cr;
+        }
+
+        private Exception exception;
+        @Override
+        protected void onPreExecute() {
+            Log.v("a", "START");
+            // Show the ProgressDialog on this thread
+            MainActivity.this.pd = ProgressDialog.show(context, "Processing...", "Uploading Image", true, false);
+        }
+        protected Bitmap doInBackground(String... urls) {
+           imgFile = new File(dir + "remitbee_profile_pic.jpg");
+            Bitmap myBitmap = null;
+            System.out.println("PATH: " + selectedImageuri);
+            try {
+                myBitmap = MediaStore.Images.Media.getBitmap(cr, selectedImageuri);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            FileOutputStream fileOut = null;
+            try {
+                fileOut = new FileOutputStream(imgFile);
+                myBitmap.compress(Bitmap.CompressFormat.PNG, 100, fileOut);
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+            newResult = Bitmap.createScaledBitmap(myBitmap, 250, 250, false);
+            return newResult;
+
+        }
+
+
+        protected void onPostExecute(Bitmap result) {
+            make_uri_and_update(trigger, result, imgFile);
+            if (MainActivity.this.pd != null) {
+                MainActivity.this.pd.dismiss();
+            }
+        }
+    }
+    public int uploadFile(String sourceFileUri, String upLoadServerUri) {
+        String fileName = sourceFileUri;
+        System.out.println("Uploading FIle");
+        HttpURLConnection conn = null;
+        DataOutputStream dos = null;
+        String lineEnd = "\r\n";
+        String twoHyphens = "--";
+        String boundary = "*****";
+        int bytesRead, bytesAvailable, bufferSize;
+        byte[] buffer;
+        int maxBufferSize = 1 * 1024 * 1024;
+        File sourceFile = new File(sourceFileUri);
+
+        if (!sourceFile.isFile()) {
+            pd.dismiss();
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    Log.e("ee","Ee");
+                }
+            });
+            return 0;
+        }
+        else
+        {
+            try {
+                // open a URL connection to the Servlet
+                FileInputStream fileInputStream = new FileInputStream(sourceFile);
+                URL url = new URL(upLoadServerUri);
+                System.out.println("URL" + upLoadServerUri);
+
+                // Open a HTTP  connection to  the URL
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setDoInput(true); // Allow Inputs
+                conn.setDoOutput(true); // Allow Outputs
+                conn.setUseCaches(false); // Don't use a Cached Copy
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Connection", "Keep-Alive");
+                conn.setRequestProperty("ENCTYPE", "multipart/form-data");
+                conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
+                conn.setRequestProperty("uploaded_file", fileName);
+
+                dos = new DataOutputStream(conn.getOutputStream());
+
+                dos.writeBytes(twoHyphens + boundary + lineEnd);
+                dos.writeBytes("Content-Disposition: form-data; name=\"uploaded_file\";filename=\""
+                        + fileName + "\"" + lineEnd);
+                dos.writeBytes(lineEnd);
+
+                // create a buffer of  maximum size
+                bytesAvailable = fileInputStream.available();
+
+                bufferSize = Math.min(bytesAvailable, maxBufferSize);
+                buffer = new byte[bufferSize];
+
+                // read file and write it into form...
+                bytesRead = fileInputStream.read(buffer, 0, bufferSize);
+
+                while (bytesRead > 0) {
+                    dos.write(buffer, 0, bufferSize);
+                    bytesAvailable = fileInputStream.available();
+                    bufferSize = Math.min(bytesAvailable, maxBufferSize);
+                    bytesRead = fileInputStream.read(buffer, 0, bufferSize);
+                }
+
+                // send multipart form data necesssary after file data...
+                dos.writeBytes(lineEnd);
+                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
+
+                // Responses from the server (code and message)
+                serverResponseCode = conn.getResponseCode();
+                String serverResponseMessage = conn.getResponseMessage();
+
+                Log.i("uploadFile", "HTTP Response is : "
+                        + serverResponseMessage + ": " + serverResponseCode);
+
+                // Get server response:
+                InputStream in = null;
+                try {
+                    in = conn.getInputStream();
+                    byte[] buf = new byte[1024];
+                    int read;
+                    while ((read = in.read(buf)) > 0) {
+                        System.out.println(new String(buf, 0, read, "utf-8"));
+                    }
+                } finally {
+                    in.close();
+                }
+
+                if(serverResponseCode == 200){
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            Toast.makeText(MainActivity.this, "File Upload Complete.",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+
+                //close the streams //
+                fileInputStream.close();
+                dos.flush();
+                dos.close();
+
+            } catch (MalformedURLException ex) {
+                pd.dismiss();
+                ex.printStackTrace();
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        Toast.makeText(MainActivity.this, "MalformedURLException",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+                Log.e("Upload file to server", "error: " + ex.getMessage(), ex);
+            } catch (Exception e) {
+                pd.dismiss();
+                e.printStackTrace();
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        Toast.makeText(MainActivity.this, "Got Exception : see logcat ",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+                Log.e("Upload file to server Exception", "Exception : "
+                        + e.getMessage(), e);
+            }
+            pd.dismiss();
+            return serverResponseCode;
+        } // End else block*/
     }
 
 
     public class AsyncTaskCheckQRCode extends AsyncTask<RequestPackage, String, String> {
         Context context;
-        public AsyncTaskCheckQRCode(Context context){
+
+        public AsyncTaskCheckQRCode(Context context) {
             this.context = context;
         }
+
         @Override
         protected void onPreExecute() {
             Log.v("a", "START");
@@ -175,7 +485,7 @@ public class MainActivity extends ActionBarActivity {
         protected void onPostExecute(String result) {
             user_detail = UserJSONParser.parseUserProfileFeed(result);
 
-            if(user_detail.getCus_unique_id()!=""){
+            if (user_detail.getCus_unique_id() != "") {
                 Toast.makeText(getApplicationContext(), user_detail.getCus_unique_id(), Toast.LENGTH_LONG).show();
 
                 // Set basic detail:
@@ -189,19 +499,25 @@ public class MainActivity extends ActionBarActivity {
                 email_lbl.setText("Email");
                 phone_lbl.setText("Phone");
 
+                cus_id_1.setImageDrawable(getApplicationContext().getResources().getDrawable(R.drawable.moneybag));
+                cus_id_2.setImageDrawable(getApplicationContext().getResources().getDrawable(R.drawable.moneybag));
+                cus_id_3.setImageDrawable(getApplicationContext().getResources().getDrawable(R.drawable.moneybag));
+
                 // Set Images:
-                if(!user_detail.getCus_id_1().equals("")){
-                    new RetrievePic("id_1").execute(user_detail.getCus_id_1());
+                user_id_1 = user_detail.getCus_id_1();
+                if (!user_id_1.equals("")) {
+                    new RetrievePic("id_1").execute(user_id_1);
                 }
-                if(!user_detail.getCus_id_2().equals("")){
-                    new RetrievePic("id_2").execute(user_detail.getCus_id_2());
+                user_id_2 = user_detail.getCus_id_2();
+                if (!user_id_2.equals("")) {
+                    new RetrievePic("id_2").execute(user_id_2);
                 }
-                if(!user_detail.getCus_id_3().equals("")){
-                    new RetrievePic("id_3").execute(user_detail.getCus_id_3());
+                user_id_3 = user_detail.getCus_id_3();
+                if (!user_id_3.equals("")) {
+                    new RetrievePic("id_3").execute(user_id_3);
                 }
-            }
-            else{
-                Toast.makeText(getApplicationContext(), "Please try again", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(getApplicationContext(), "This is not a valid customer", Toast.LENGTH_LONG).show();
             }
 
             if (MainActivity.this.pd != null) {
@@ -213,11 +529,13 @@ public class MainActivity extends ActionBarActivity {
 
     class RetrievePic extends AsyncTask<String, Void, Bitmap> {
         String trigger;
-        public RetrievePic(String which_pic){
+
+        public RetrievePic(String which_pic) {
             trigger = which_pic;
         }
 
         private Exception exception;
+
         protected Bitmap doInBackground(String... urls) {
             try {
                 URL newurl = null;
@@ -228,7 +546,7 @@ public class MainActivity extends ActionBarActivity {
                 }
                 assert newurl != null;
                 Bitmap mIcon_val = null;
-                    try {
+                try {
                     URLConnection connection = newurl.openConnection();
                     connection.setUseCaches(true);
                     mIcon_val = BitmapFactory.decodeStream(connection.getInputStream());
@@ -241,7 +559,6 @@ public class MainActivity extends ActionBarActivity {
                 return null;
             }
         }
-
         protected void onPostExecute(Bitmap result) {
             if(trigger.equals("id_1")){
                 cus_id_1.setImageBitmap(result);
@@ -253,6 +570,8 @@ public class MainActivity extends ActionBarActivity {
                 cus_id_3.setImageBitmap(result);
             }
         }
+
+
     }
 
     protected boolean isOnline(){

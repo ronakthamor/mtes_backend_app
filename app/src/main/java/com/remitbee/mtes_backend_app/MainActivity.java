@@ -315,7 +315,7 @@ public class MainActivity extends ActionBarActivity {
             FileOutputStream fileOut = null;
             try {
                 fileOut = new FileOutputStream(imgFile);
-                myBitmap.compress(Bitmap.CompressFormat.PNG, 100, fileOut);
+                myBitmap.compress(Bitmap.CompressFormat.JPEG, 50, fileOut);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
